@@ -1,0 +1,13 @@
+# Core dependencies
+requests>=2.31.0
+tqdm>=4.66.0
+pdfplumber>=0.10.0
+networkx>=3.1
+pyvis>=0.3.2
+
+# Database
+# sqlite3 is part of Python standard library
+
+# Note: PyPDF2 is commented out in the original code
+# Uncomment below if needed:
+# PyPDF2>=3.0.0

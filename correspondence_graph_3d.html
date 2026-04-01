@@ -1,0 +1,1889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>3D Knowledge Graph</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #e0e0e0;
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  #graph-container { width: 100vw; height: 100vh; }
+
+  /* ── Control Panel ── */
+  #controls {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 1000;
+    background: rgba(10, 10, 20, 0.88);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 20px;
+    width: 280px;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+  #controls h2 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: #fff;
+    margin: 0;
+  }
+  #controls input[type="text"],
+  #controls input[type="number"] {
+    width: 100%;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #controls input:focus { border-color: rgba(100, 180, 255, 0.5); }
+  #controls input[type="range"] {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255,255,255,0.12);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    outline: none;
+  }
+  #controls input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #8cf;
+    cursor: pointer;
+  }
+
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ctrl-row label {
+    font-size: 12px;
+    color: #888;
+    white-space: nowrap;
+    min-width: 90px;
+  }
+  .ctrl-row input[type="number"] { width: 60px; text-align: center; }
+  .ctrl-row .val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #8cf;
+    min-width: 28px;
+    text-align: right;
+  }
+
+  .btn {
+    padding: 7px 14px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.06);
+    color: #ccc;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  .btn.active { background: rgba(100, 180, 255, 0.2); border-color: rgba(100, 180, 255, 0.4); color: #8cf; }
+
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  #stats {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #666;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  .divider { border: none; border-top: 1px solid rgba(255,255,255,0.06); margin: 4px 0; }
+
+  .section-label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── Legend items (used inline in controls panel) ── */
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: #aaa; cursor: pointer; font-size: 12px; }
+  .legend-item.dimmed { opacity: 0.3; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .select-all-row { display: flex; gap: 6px; margin-bottom: 4px; }
+  .select-all-row .btn { flex: 1; font-size: 10px; padding: 4px 8px; }
+
+  /* ── Node tooltip ── */
+  .node-tooltip {
+    background: rgba(10, 10, 20, 0.95) !important;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: 8px !important;
+    padding: 12px 16px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 12px !important;
+    color: #e0e0e0 !important;
+    max-width: 350px;
+    line-height: 1.5;
+    pointer-events: none;
+  }
+  .node-tooltip .tt-name { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .node-tooltip .tt-type { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .node-tooltip .tt-desc { color: #999; margin-bottom: 4px; }
+  .node-tooltip .tt-stat { color: #666; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+  /* ── Focus mode bar ── */
+  #focusInfo {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: rgba(10, 10, 20, 0.9);
+    border: 1px solid rgba(100, 180, 255, 0.3);
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #8cf;
+    display: none;
+    gap: 12px;
+    align-items: center;
+  }
+  #focusInfo .btn { font-size: 11px; }
+
+  /* ── Export Panel ── */
+  #exportPanel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 480px;
+    height: 100vh;
+    background: rgba(10, 10, 20, 0.95);
+    backdrop-filter: blur(16px);
+    border-left: 1px solid rgba(255,255,255,0.08);
+    z-index: 1500;
+    display: none;
+    flex-direction: column;
+    font-family: 'DM Sans', sans-serif;
+  }
+  #exportPanel.open { display: flex; }
+
+  #exportHeader {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  #exportHeader h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: #fff;
+    margin: 0;
+    flex: 1;
+  }
+  #exportHeader .btn { font-size: 11px; padding: 5px 12px; }
+
+  #exportContent {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+  #exportText {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #ccc;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  #exportFooter {
+    padding: 12px 20px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  #exportFooter .btn { flex: 1; }
+
+  .copy-flash { background: rgba(100, 180, 255, 0.3) !important; transition: background 0.15s; }
+</style>
+</head>
+<body>
+
+<div id="graph-container"></div>
+
+<!-- Control Panel -->
+<div id="controls">
+  <h2>⬡ Knowledge Graph</h2>
+
+  <label for="fileInput" class="btn" style="width:100%; text-align:center; cursor:pointer;">📂 Load graph_data.json</label>
+  <input type="file" id="fileInput" accept=".json" style="display:none" />
+
+  <input type="text" id="searchBox" placeholder="Search entities..." spellcheck="false" />
+
+  <div class="btn" id="exportBtn" style="width:100%; text-align:center;">📋 Export Visible to Panel</div>
+
+  <div class="btn-row">
+    <div class="btn" id="hideNonMatchBtn" style="flex:1; text-align:center;" disabled>🔻 Hide Non-Matching</div>
+    <div class="btn" id="showAllBtn" style="flex:1; text-align:center;" disabled>🔺 Show All</div>
+  </div>
+
+  <div class="ctrl-row">
+    <label>Min connections</label>
+    <input type="number" id="minDegree" />
+  </div>
+
+  <hr class="divider">
+  <span class="section-label" id="legendSectionLabel">Entity types</span>
+  <div class="select-all-row">
+    <div class="btn" id="dimNoneBtn">Show All</div>
+    <div class="btn" id="dimAllBtn">Dim All</div>
+  </div>
+  <div id="typeFilters"></div>
+
+  <hr class="divider">
+  <span class="section-label">Labels</span>
+  <div class="ctrl-row"><label>Top labels</label><input type="range" id="labelCountSlider" step="1" style="flex:1" /><span class="val" id="labelCountVal"></span></div>
+  <div class="ctrl-row"><label>Label size</label><input type="range" id="labelSizeSlider" step="0.5" style="flex:1" /><span class="val" id="labelSizeVal"></span></div>
+  <div class="ctrl-row"><label>Label opacity</label><input type="range" id="labelOpacitySlider" step="0.05" style="flex:1" /><span class="val" id="labelOpacityVal"></span></div>
+  <div class="ctrl-row"><label>Label BG opacity</label><input type="range" id="labelBgSlider" step="0.05" style="flex:1" /><span class="val" id="labelBgVal"></span></div>
+
+  <hr class="divider">
+  <span class="section-label">Nodes</span>
+  <div class="ctrl-row"><label>Base size</label><input type="range" id="baseSizeSlider" step="0.1" style="flex:1" /><span class="val" id="baseSizeVal"></span></div>
+  <div class="ctrl-row"><label>Degree scale</label><input type="range" id="degreeScaleSlider" step="0.05" style="flex:1" /><span class="val" id="degreeScaleVal"></span></div>
+
+  <hr class="divider">
+  <span class="section-label">Edges</span>
+  <div class="ctrl-row"><label>Edge opacity</label><input type="range" id="edgeOpacitySlider" step="0.01" style="flex:1" /><span class="val" id="edgeOpacityVal"></span></div>
+  <div class="ctrl-row"><label>Edge width</label><input type="range" id="edgeWidthSlider" step="0.05" style="flex:1" /><span class="val" id="edgeWidthVal"></span></div>
+
+  <hr class="divider">
+  <span class="section-label">Physics</span>
+  <div class="ctrl-row"><label>Repulsion</label><input type="range" id="chargeSlider" step="5" style="flex:1" /><span class="val" id="chargeVal"></span></div>
+  <div class="ctrl-row"><label>Spring length</label><input type="range" id="springLenSlider" step="5" style="flex:1" /><span class="val" id="springLenVal"></span></div>
+  <div class="ctrl-row"><label>Spring force</label><input type="range" id="springStrSlider" step="0.01" style="flex:1" /><span class="val" id="springStrVal"></span></div>
+  <div class="ctrl-row"><label>Gravity</label><input type="range" id="gravitySlider" step="0.005" style="flex:1" /><span class="val" id="gravityVal"></span></div>
+
+  <hr class="divider">
+
+  <div class="btn-row">
+    <div class="btn active" id="toggleLabels">Labels: ON</div>
+    <div class="btn" id="toggle2D">View: 3D</div>
+    <div class="btn" id="toggleCommunity">Color: Type</div>
+  </div>
+
+  <div class="btn-row">
+    <div class="btn active" id="focusBtn">Focus: ON</div>
+    <div class="btn" id="resetBtn">Reset View</div>
+  </div>
+
+  <div class="ctrl-row"><label>Focus hops</label><input type="range" id="focusHopsSlider" step="1" style="flex:1" /><span class="val" id="focusHopsVal"></span></div>
+
+  <hr class="divider">
+  <div id="stats"></div>
+</div>
+
+<!-- Focus mode bar -->
+<div id="focusInfo">
+  <span id="focusLabel">Click a node to focus</span>
+  <div class="btn" id="exitFocus">Exit Focus</div>
+</div>
+
+<!-- Export Panel (right side) -->
+<div id="exportPanel">
+  <div id="exportHeader">
+    <h3 id="exportTitle">Export</h3>
+    <div class="btn" id="exportCopyBtn">📋 Copy All</div>
+    <div class="btn" id="exportCloseBtn">✕</div>
+  </div>
+  <div id="exportContent">
+    <div id="exportText"></div>
+  </div>
+  <div id="exportFooter">
+    <div class="btn" id="exportCopyBtn2">📋 Copy to Clipboard</div>
+  </div>
+</div>
+
+<!-- Three.js first (so window.THREE exists), then 3d-force-graph -->
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
+
+<script>
+// ============================================================
+// DEFAULTS — edit these to change startup values
+// Each entry: { val: default, min: slider min, max: slider max }
+// ============================================================
+
+const DEFAULTS = {
+  topLabels:    { val: 80,    min: 0,     max: 200  },
+  labelSize:    { val: 7.5,   min: 1,     max: 30   },
+  labelOpacity: { val: 0.9,   min: 0.1,   max: 1    },
+  labelBg:      { val: 0.8,   min: 0,     max: 1    },
+  baseSize:     { val: 3.0,   min: 0.2,   max: 10   },
+  degreeScale:  { val: 0.2,   min: 0,     max: 4    },
+  edgeOpacity:  { val: 0.05,  min: 0.01,  max: 1    },
+  edgeWidth:    { val: 0.1,   min: 0.05,  max: 4    },
+  repulsion:    { val: -500,  min: -1000, max: -10  },
+  springLen:    { val: 10,    min: 5,     max: 300  },
+  springForce:  { val: 1.0,   min: 0,     max: 1    },
+  gravity:      { val: 0.14,  min: 0,     max: 0.5  },
+  focusHops:    { val: 1,     min: 1,     max: 5    },
+  minDegree:    { val: 1,     min: 1,     max: 50   },
+  panSpeed:     { val: 0.05,  min: 0.01,  max: 0.5  },
+};
+
+// Known colors for common entity types — any types not listed here
+// get auto-assigned a color from the EXTRA_PALETTE when data loads.
+const KNOWN_COLORS = {
+  person:       '#3498db',
+  character:    '#3498db',     // alias for MOL dataset
+  organization: '#f39c12',
+  issue:        '#e74c3c',
+  project:      '#2ecc71',
+  location:     '#9b59b6',
+  document:     '#f403fc',
+  equipment:    '#1abc9c',
+  regulation:   '#e67e22',
+  concept:      '#e056a0',     // for MOL dataset
+  item:         '#56b4e9',     // for MOL dataset
+};
+
+// Colors for auto-assigned types (cycled if more types than colors)
+const EXTRA_PALETTE = [
+  '#ff6b6b', '#48dbfb', '#feca57', '#ff9ff3', '#54a0ff',
+  '#5f27cd', '#01a3a4', '#c8d6e5', '#ee5a24', '#7ed6df',
+  '#badc58', '#f9ca24', '#6ab04c', '#eb4d4b', '#30336b',
+];
+
+// Active color map — built from data on load
+let NODE_COLORS = { unknown: '#95a5a6' };
+
+function buildColorMap(nodes) {
+  // Discover all entity types from the data
+  const types = new Set();
+  nodes.forEach(n => { if (n.entity_type) types.add(n.entity_type); });
+
+  // Assign known colors first
+  NODE_COLORS = { unknown: '#95a5a6' };
+  let extraIdx = 0;
+
+  for (const type of [...types].sort()) {
+    if (KNOWN_COLORS[type]) {
+      NODE_COLORS[type] = KNOWN_COLORS[type];
+    } else {
+      NODE_COLORS[type] = EXTRA_PALETTE[extraIdx % EXTRA_PALETTE.length];
+      extraIdx++;
+    }
+  }
+
+  console.log('Entity types discovered:', Object.keys(NODE_COLORS).filter(t => t !== 'unknown'));
+}
+
+// Community colors — generated on data load
+let COMMUNITY_COLORS = {};
+
+// Distinct palette for communities (maximally separated hues)
+const COMMUNITY_PALETTE = [
+  '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+  '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
+  '#469990', '#dcbeff', '#9A6324', '#fffac8', '#800000',
+  '#aaffc3', '#808000', '#ffd8b1', '#000075', '#a9a9a9',
+  '#e6beff', '#1abc9c', '#ff6b6b', '#48dbfb', '#feca57',
+];
+
+function buildCommunityColorMap(nodes) {
+  COMMUNITY_COLORS = {};
+  const communities = new Set();
+  nodes.forEach(n => { if (n.community !== undefined) communities.add(n.community); });
+
+  const sorted = [...communities].sort((a, b) => a - b);
+  sorted.forEach((c, i) => {
+    COMMUNITY_COLORS[c] = COMMUNITY_PALETTE[i % COMMUNITY_PALETTE.length];
+  });
+
+  console.log(`Community colors assigned for ${sorted.length} communities`);
+}
+
+// ============================================================
+// UNIFIED LEGEND / FILTER (merged into left panel #typeFilters)
+// ============================================================
+
+// Single function builds the entire legend+filter section.
+// In type mode: shows entity types as clickable dim toggles.
+// In community mode: shows communities as clickable dim toggles.
+function rebuildFilterPanel() {
+  const container = document.getElementById('typeFilters');
+  container.innerHTML = '';
+
+  const label = document.getElementById('legendSectionLabel');
+
+  if (colorByCommunity) {
+    label.textContent = 'Communities';
+
+    // Count nodes per community
+    const commCounts = {};
+    rawData.nodes.forEach(n => {
+      const c = n.community !== undefined ? n.community : -1;
+      commCounts[c] = (commCounts[c] || 0) + 1;
+    });
+
+    const sorted = Object.entries(commCounts).sort((a, b) => b[1] - a[1]).slice(0, 25);
+    sorted.forEach(([c, count]) => {
+      const cInt = parseInt(c);
+      const color = COMMUNITY_COLORS[cInt] || '#95a5a6';
+      const isDimmed = dimmedCommunities.has(cInt);
+
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (isDimmed ? ' dimmed' : '');
+      item.dataset.community = c;
+      item.innerHTML = `<div class="legend-dot" style="background:${color}"></div>Community ${c} (${count})`;
+      item.addEventListener('click', () => {
+        if (dimmedCommunities.has(cInt)) {
+          dimmedCommunities.delete(cInt);
+          item.classList.remove('dimmed');
+        } else {
+          dimmedCommunities.add(cInt);
+          item.classList.add('dimmed');
+        }
+        updateHighlightState();
+        refreshVisuals();
+      });
+      container.appendChild(item);
+    });
+
+  } else {
+    label.textContent = 'Entity types';
+
+    activeTypes = new Set(Object.keys(NODE_COLORS).filter(t => t !== 'unknown'));
+
+    Object.entries(NODE_COLORS).forEach(([type, color]) => {
+      if (type === 'unknown') return;
+      const isDimmed = dimmedTypes.has(type);
+
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (isDimmed ? ' dimmed' : '');
+      item.dataset.type = type;
+      item.innerHTML = `<div class="legend-dot" style="background:${color}"></div>${type}`;
+      item.addEventListener('click', () => {
+        if (dimmedTypes.has(type)) {
+          dimmedTypes.delete(type);
+          item.classList.remove('dimmed');
+        } else {
+          dimmedTypes.add(type);
+          item.classList.add('dimmed');
+        }
+        updateHighlightState();
+        refreshVisuals();
+      });
+      container.appendChild(item);
+    });
+  }
+}
+
+// Aliases for backward compat with existing calls
+function rebuildTypeFilters() { dimmedTypes.clear(); rebuildFilterPanel(); }
+function rebuildLegend() { rebuildFilterPanel(); }
+
+// Select all / dim all buttons
+document.getElementById('dimNoneBtn').addEventListener('click', () => {
+  dimmedTypes.clear();
+  dimmedCommunities.clear();
+  rebuildFilterPanel();
+  updateHighlightState();
+  refreshVisuals();
+});
+
+document.getElementById('dimAllBtn').addEventListener('click', () => {
+  if (colorByCommunity) {
+    // Dim all communities
+    rawData.nodes.forEach(n => {
+      dimmedCommunities.add(n.community !== undefined ? n.community : -1);
+    });
+  } else {
+    // Dim all types
+    Object.keys(NODE_COLORS).forEach(t => {
+      if (t !== 'unknown') dimmedTypes.add(t);
+    });
+  }
+  rebuildFilterPanel();
+  updateHighlightState();
+  refreshVisuals();
+});
+
+// Check if any visual dimming is active and update hide button
+function updateHighlightState() {
+  const hasDims = dimmedTypes.size > 0 || dimmedCommunities.size > 0;
+  const hasSearch = searchTerm && searchMatchIds.size > 0;
+  const hasFocus = focusNodeId && focusNeighbors.size > 0;
+  document.getElementById('hideNonMatchBtn').disabled = !(hasDims || hasSearch || hasFocus);
+}
+
+// Check if a node is currently dimmed
+function isNodeDimmed(node) {
+  if (dimmedTypes.has(node.entity_type)) return true;
+  if (dimmedCommunities.has(node.community !== undefined ? node.community : -1)) return true;
+  return false;
+}
+
+// Isolate by entity type — dims all other types, works in any color mode
+function isolateByType(targetType) {
+  searchTerm = '';
+  searchMatchIds.clear();
+  document.getElementById('searchBox').value = '';
+  focusNodeId = null;
+  focusNeighbors.clear();
+  document.getElementById('focusInfo').style.display = 'none';
+
+  dimmedTypes.clear();
+  Object.keys(NODE_COLORS).forEach(t => {
+    if (t !== 'unknown' && t !== targetType) dimmedTypes.add(t);
+  });
+
+  rebuildFilterPanel();
+  updateHighlightState();
+  refreshVisuals();
+}
+
+// Isolate by community — dims all other communities, works in any color mode
+function isolateByCommunity(targetCommunity) {
+  searchTerm = '';
+  searchMatchIds.clear();
+  document.getElementById('searchBox').value = '';
+  focusNodeId = null;
+  focusNeighbors.clear();
+  document.getElementById('focusInfo').style.display = 'none';
+
+  dimmedCommunities.clear();
+  Graph.graphData().nodes.forEach(n => {
+    const c = n.community !== undefined ? n.community : -1;
+    if (c !== targetCommunity) dimmedCommunities.add(c);
+  });
+
+  rebuildFilterPanel();
+  updateHighlightState();
+  refreshVisuals();
+}
+
+function clearAllDims() {
+  dimmedTypes.clear();
+  dimmedCommunities.clear();
+  rebuildFilterPanel();
+  updateHighlightState();
+  refreshVisuals();
+}
+
+// ============================================================
+// DATA — loaded via file picker from graph_data.json
+// ============================================================
+
+let rawData = { nodes: [], links: [] };
+
+// ============================================================
+// STATE — initialized from DEFAULTS
+// ============================================================
+
+let showLabels = true;
+let is3D = true;
+let focusMode = true;
+let colorByCommunity = false;
+let activeTypes = new Set();  // populated on data load by rebuildTypeFilters()
+let dimmedTypes = new Set();        // types visually dimmed (but still in physics)
+let dimmedCommunities = new Set();  // communities visually dimmed
+let minDegree = DEFAULTS.minDegree.val;
+let searchTerm = '';
+let focusNodeId = null;
+let focusNeighbors = new Set();
+let focusHops = DEFAULTS.focusHops.val;
+let topLabelCount = DEFAULTS.topLabels.val;
+let searchMatchIds = new Set();
+let nodesByDegree = [];
+let nodeBaseSize = DEFAULTS.baseSize.val;
+let degreeScale = DEFAULTS.degreeScale.val;
+let labelSize = DEFAULTS.labelSize.val;
+let labelOpacity = DEFAULTS.labelOpacity.val;
+let labelBgOpacity = DEFAULTS.labelBg.val;
+let edgeOpacity = DEFAULTS.edgeOpacity.val;
+let edgeWidthScale = DEFAULTS.edgeWidth.val;
+
+// ============================================================
+// SLIDER INIT — populate all sliders from DEFAULTS
+// ============================================================
+
+function initSlider(inputId, valId, def, formatFn) {
+  const input = document.getElementById(inputId);
+  const valSpan = document.getElementById(valId);
+  input.min = def.min;
+  input.max = def.max;
+  input.value = def.val;
+  valSpan.textContent = formatFn ? formatFn(def.val) : def.val;
+}
+
+// Number input
+const minDegEl = document.getElementById('minDegree');
+minDegEl.min = DEFAULTS.minDegree.min;
+minDegEl.max = DEFAULTS.minDegree.max;
+minDegEl.value = DEFAULTS.minDegree.val;
+
+// All range sliders
+initSlider('labelCountSlider', 'labelCountVal', DEFAULTS.topLabels);
+initSlider('labelSizeSlider',  'labelSizeVal',  DEFAULTS.labelSize,    v => v.toFixed(1));
+initSlider('labelOpacitySlider','labelOpacityVal',DEFAULTS.labelOpacity,v => v.toFixed(2));
+initSlider('labelBgSlider',    'labelBgVal',     DEFAULTS.labelBg,     v => v.toFixed(2));
+initSlider('baseSizeSlider',   'baseSizeVal',    DEFAULTS.baseSize,    v => v.toFixed(1));
+initSlider('degreeScaleSlider','degreeScaleVal',  DEFAULTS.degreeScale, v => v.toFixed(2));
+initSlider('edgeOpacitySlider','edgeOpacityVal',  DEFAULTS.edgeOpacity, v => v.toFixed(2));
+initSlider('edgeWidthSlider',  'edgeWidthVal',   DEFAULTS.edgeWidth,   v => v.toFixed(2));
+initSlider('chargeSlider',     'chargeVal',      DEFAULTS.repulsion);
+initSlider('springLenSlider',  'springLenVal',   DEFAULTS.springLen);
+initSlider('springStrSlider',  'springStrVal',   DEFAULTS.springForce,  v => v.toFixed(2));
+initSlider('gravitySlider',    'gravityVal',     DEFAULTS.gravity,      v => v.toFixed(3));
+initSlider('focusHopsSlider',  'focusHopsVal',   DEFAULTS.focusHops);
+
+// ============================================================
+// GRAPH INIT
+// ============================================================
+
+const container = document.getElementById('graph-container');
+
+const Graph = ForceGraph3D()(container)
+  .graphData({ nodes: [], links: [] })
+  .backgroundColor('#0a0a0f')
+  .nodeLabel('')
+  .linkWidth(link => Math.min(0.2 + link.weight * edgeWidthScale, 6))
+  .linkOpacity(1.0)  // opacity handled via linkColor alpha
+  .onNodeHover(null)  // overridden in init() to also track lastHoveredNode
+  .onNodeClick(node => {
+    if (focusMode) { focusOnNode(node); }
+    else {
+      const d = 120, r = 1 + d / Math.hypot(node.x, node.y, node.z||0);
+      Graph.cameraPosition({ x:node.x*r, y:node.y*r, z:(node.z||0)*r }, node, 1000);
+    }
+  })
+  .onBackgroundClick(() => { if (focusNodeId) clearFocus(); })
+  .d3AlphaDecay(0.02)
+  .d3VelocityDecay(0.3)
+  .warmupTicks(100)
+  .cooldownTicks(200);
+
+// ============================================================
+// THREE.js — extract from the graph's bundled copy
+// ============================================================
+
+// THREE.js — loaded explicitly via CDN before 3d-force-graph
+const THREE = window.THREE;
+
+// ============================================================
+// CANVAS SPRITE LABELS
+// ============================================================
+
+const labelSpriteCache = new Map();
+let cachedBgOpacity = -1;  // track what bgOpacity the cache was built with
+
+function createLabelSprite(text, color, bgOpacity) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  const fontSize = 64;
+  const font = `600 ${fontSize}px "JetBrains Mono", Consolas, monospace`;
+  ctx.font = font;
+
+  const tw = ctx.measureText(text).width;
+  const pad = 24;
+  canvas.width  = tw + pad * 2;
+  canvas.height  = fontSize + pad * 2;
+
+  // Background pill with configurable opacity
+  ctx.fillStyle = `rgba(10, 10, 20, ${bgOpacity})`;
+  const r = 10, w = canvas.width, h = canvas.height;
+  ctx.beginPath();
+  ctx.moveTo(r,0); ctx.lineTo(w-r,0); ctx.quadraticCurveTo(w,0,w,r);
+  ctx.lineTo(w,h-r); ctx.quadraticCurveTo(w,h,w-r,h);
+  ctx.lineTo(r,h); ctx.quadraticCurveTo(0,h,0,h-r);
+  ctx.lineTo(0,r); ctx.quadraticCurveTo(0,0,r,0);
+  ctx.closePath(); ctx.fill();
+
+  // Border
+  ctx.strokeStyle = color + '66';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Text
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, w/2, h/2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(material);
+
+  const aspect = canvas.width / canvas.height;
+  sprite.scale.set(4 * aspect, 4, 1);
+  sprite._aspect = aspect;
+
+  return sprite;
+}
+
+function getCachedSprite(nodeId, nodeName, color) {
+  // Invalidate cache if bg opacity changed
+  if (cachedBgOpacity !== labelBgOpacity) {
+    labelSpriteCache.clear();
+    cachedBgOpacity = labelBgOpacity;
+  }
+  if (!labelSpriteCache.has(nodeId)) {
+    labelSpriteCache.set(nodeId, createLabelSprite(nodeName, color, labelBgOpacity));
+  }
+  const src = labelSpriteCache.get(nodeId);
+  const clone = src.clone();
+  clone.material = src.material.clone();
+  // Apply current labelSize and labelOpacity
+  const aspect = src._aspect || 1;
+  clone.scale.set(labelSize * aspect, labelSize, 1);
+  clone.material.opacity = labelOpacity;
+  return clone;
+}
+
+// ============================================================
+// LABEL VISIBILITY LOGIC
+// ============================================================
+
+function shouldShowLabel(node) {
+  if (!showLabels || !THREE) return false;
+
+  // Never label dimmed nodes
+  if (isNodeDimmed(node)) return false;
+
+  // Search mode: label matches (non-dimmed), top N by degree
+  if (searchTerm && searchMatchIds.has(node.id)) {
+    return getLabelRankInSet(node.id, searchMatchIds) < topLabelCount;
+  }
+
+  // Focus mode: label neighborhood (non-dimmed), top N by degree
+  if (focusNodeId && focusNeighbors.has(node.id)) {
+    return getLabelRankInSet(node.id, focusNeighbors) < topLabelCount;
+  }
+
+  // If in search or focus mode, don't also show top-N from full graph
+  if (searchTerm || focusNodeId) return false;
+
+  // Default: top N by degree among non-dimmed nodes
+  const rank = getVisibleLabelRank(node.id);
+  return (rank >= 0 && rank < topLabelCount);
+}
+
+// Rank a node within a subset by degree (cached per refresh cycle), excluding dimmed
+let _labelRankCache = null;
+let _labelRankCacheKey = '';
+
+function getLabelRankInSet(nodeId, idSet) {
+  const key = 'set|' + (searchTerm || focusNodeId || '') + '|' + idSet.size + '|' + dimmedTypes.size + '|' + dimmedCommunities.size;
+  if (_labelRankCacheKey !== key) {
+    // Ranked list: nodesByDegree filtered to the set AND non-dimmed
+    const nodeMap = new Map();
+    Graph.graphData().nodes.forEach(n => nodeMap.set(n.id, n));
+    _labelRankCache = nodesByDegree.filter(id => {
+      if (!idSet.has(id)) return false;
+      const n = nodeMap.get(id);
+      return n && !isNodeDimmed(n);
+    });
+    _labelRankCacheKey = key;
+  }
+  return _labelRankCache.indexOf(nodeId);
+}
+
+// Rank among all non-dimmed nodes (for default mode)
+let _visibleRankCache = null;
+let _visibleRankCacheKey = '';
+
+function getVisibleLabelRank(nodeId) {
+  const key = 'vis|' + dimmedTypes.size + '|' + dimmedCommunities.size + '|' + nodesByDegree.length;
+  if (_visibleRankCacheKey !== key) {
+    const nodeMap = new Map();
+    Graph.graphData().nodes.forEach(n => nodeMap.set(n.id, n));
+    _visibleRankCache = nodesByDegree.filter(id => {
+      const n = nodeMap.get(id);
+      return n && !isNodeDimmed(n);
+    });
+    _visibleRankCacheKey = key;
+  }
+  return _visibleRankCache.indexOf(nodeId);
+}
+
+function getNodeColor(node) {
+  // Search/focus dims take priority
+  if (searchTerm && !searchMatchIds.has(node.id)) return '#222222';
+  if (focusNodeId && !focusNeighbors.has(node.id)) return '#1a1a1a';
+  // Visual type/community dims
+  if (isNodeDimmed(node)) return '#222222';
+
+  if (colorByCommunity) {
+    const c = node.community !== undefined ? node.community : -1;
+    return COMMUNITY_COLORS[c] || '#95a5a6';
+  }
+  return NODE_COLORS[node.entity_type] || NODE_COLORS.unknown;
+}
+
+function getNodeOpacity(node) {
+  if (searchTerm && !searchMatchIds.has(node.id)) return 0.12;
+  if (focusNodeId && !focusNeighbors.has(node.id)) return 0.08;
+  if (isNodeDimmed(node)) return 0.08;
+  return 0.9;
+}
+
+// ============================================================
+// NODE RENDERING (performance-optimized)
+// ============================================================
+
+// Shared geometry cache — avoid creating thousands of identical SphereGeometry objects
+const _geoCache = new Map();
+function getSharedGeo(radius, segments) {
+  const key = `${radius.toFixed(2)}_${segments}`;
+  if (!_geoCache.has(key)) {
+    _geoCache.set(key, new THREE.SphereGeometry(radius, segments, segments));
+  }
+  return _geoCache.get(key);
+}
+
+// Track active label sprites so we can reposition them each frame
+const _activeLabelSprites = new Map();  // nodeId -> { sprite, radius }
+
+function buildNodeObject(node) {
+  const color = getNodeColor(node);
+  const opacity = getNodeOpacity(node);
+  const radius = nodeBaseSize + Math.pow(node.connections, 0.6) * degreeScale;
+  // Round radius for better geometry cache hits
+  const rRound = Math.round(radius * 4) / 4;
+
+  // Clean up any previous label tracking for this node
+  _activeLabelSprites.delete(node.id);
+
+  if (THREE && shouldShowLabel(node)) {
+    const group = new THREE.Group();
+
+    // Labeled nodes get slightly more polished sphere (10 segments)
+    const geo = getSharedGeo(rRound, 10);
+    const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity });
+    group.add(new THREE.Mesh(geo, mat));
+
+    const typeColor = colorByCommunity
+      ? (COMMUNITY_COLORS[node.community !== undefined ? node.community : -1] || '#95a5a6')
+      : (NODE_COLORS[node.entity_type] || NODE_COLORS.unknown);
+    const sprite = getCachedSprite(node.id, node.name, typeColor);
+    // Initial position — will be updated each frame by the camera-facing loop
+    sprite.position.set(0, radius + 4, 0);
+    group.add(sprite);
+
+    // Track for per-frame repositioning
+    _activeLabelSprites.set(node.id, { sprite, radius, group });
+
+    return group;
+  }
+
+  // No label — low-poly sphere (6 segments saves ~60% triangles vs 12)
+  if (THREE) {
+    const geo = getSharedGeo(rRound, 6);
+    const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  return undefined;
+}
+
+// Per-frame: offset each label sprite toward the camera so it's always in front of its orb
+// Reuse Vector3s to avoid GC pressure
+const _tmpNodePos = new THREE.Vector3();
+const _tmpDir = new THREE.Vector3();
+
+function updateLabelPositions() {
+  if (_activeLabelSprites.size === 0) return;
+
+  const camera = Graph.camera();
+  if (!camera) return;
+
+  const camPos = camera.position;
+
+  _activeLabelSprites.forEach(({ sprite, radius, group }) => {
+    if (!group.parent) return;
+
+    // Node world position
+    group.getWorldPosition(_tmpNodePos);
+
+    // Direction from node toward camera, normalized
+    _tmpDir.subVectors(camPos, _tmpNodePos).normalize();
+
+    // Place label just past the sphere surface, toward camera
+    sprite.position.set(
+      _tmpDir.x * (radius + 2),
+      _tmpDir.y * (radius + 2),
+      _tmpDir.z * (radius + 2)
+    );
+  });
+}
+
+// Run label repositioning in a standalone animation loop
+function labelUpdateLoop() {
+  updateLabelPositions();
+  requestAnimationFrame(labelUpdateLoop);
+}
+requestAnimationFrame(labelUpdateLoop);
+
+// Wire rendering
+Graph
+  .nodeThreeObject(node => buildNodeObject(node))
+  .nodeThreeObjectExtend(false)
+  .linkColor(link => {
+    const s = typeof link.source === 'object' ? link.source.id : link.source;
+    const t = typeof link.target === 'object' ? link.target.id : link.target;
+
+    // Check if either endpoint is dimmed (by type or community)
+    const sNode = typeof link.source === 'object' ? link.source : null;
+    const tNode = typeof link.target === 'object' ? link.target : null;
+    const sDimmed = sNode ? isNodeDimmed(sNode) : false;
+    const tDimmed = tNode ? isNodeDimmed(tNode) : false;
+
+    if (focusNodeId) {
+      if (focusNeighbors.has(s) && focusNeighbors.has(t) && !sDimmed && !tDimmed)
+        return `rgba(100,180,255,${Math.min(edgeOpacity + 0.3, 1)})`;
+      return 'rgba(40,40,40,0.06)';
+    }
+    if (searchTerm) {
+      if (searchMatchIds.has(s) && searchMatchIds.has(t) && !sDimmed && !tDimmed)
+        return `rgba(255,200,100,${Math.min(edgeOpacity + 0.3, 1)})`;
+      return 'rgba(40,40,40,0.06)';
+    }
+    // Dim edges where either endpoint is dimmed
+    if (sDimmed || tDimmed) return 'rgba(40,40,40,0.04)';
+
+    return `rgba(140,140,140,${edgeOpacity})`;
+  });
+
+// ── Custom tooltip ──
+const tooltip = document.createElement('div');
+tooltip.id = 'customTooltip';
+tooltip.className = 'node-tooltip';
+tooltip.style.cssText = 'display:none; position:fixed; z-index:2000; pointer-events:none;';
+document.body.appendChild(tooltip);
+document.addEventListener('mousemove', e => {
+  tooltip.style.left = (e.clientX + 16) + 'px';
+  tooltip.style.top  = (e.clientY + 16) + 'px';
+});
+
+// ============================================================
+// REFRESH
+// ============================================================
+
+function refreshVisuals() {
+  // Invalidate caches
+  _labelRankCacheKey = '';
+  _visibleRankCacheKey = '';
+  _activeLabelSprites.clear();
+
+  searchMatchIds.clear();
+  if (searchTerm) {
+    Graph.graphData().nodes.forEach(n => {
+      if (n.searchText.includes(searchTerm)) searchMatchIds.add(n.id);
+    });
+  }
+
+  // Clear geometry cache when visuals change to avoid stale colors
+  _geoCache.clear();
+
+  Graph.nodeThreeObject(Graph.nodeThreeObject());
+  Graph.linkColor(Graph.linkColor());
+  Graph.linkWidth(Graph.linkWidth());
+
+  // Update hide button state
+  const hasHighlighted = (searchTerm && searchMatchIds.size > 0) || (focusNodeId && focusNeighbors.size > 0);
+  document.getElementById('hideNonMatchBtn').disabled = !hasHighlighted;
+}
+
+// ============================================================
+// HIDE / SHOW NON-MATCHING
+// ============================================================
+
+let hiddenRawData = null;  // stashed copy of rawData before hiding
+
+function hideNonMatching() {
+  // Determine which node IDs to keep based on all active highlight states
+  let keepIds = new Set();
+  const allNodes = Graph.graphData().nodes;
+
+  if (searchTerm && searchMatchIds.size > 0) {
+    keepIds = new Set(searchMatchIds);
+  } else if (focusNodeId && focusNeighbors.size > 0) {
+    keepIds = new Set(focusNeighbors);
+  } else if (dimmedTypes.size > 0 || dimmedCommunities.size > 0) {
+    // Keep only non-dimmed nodes
+    allNodes.forEach(n => {
+      if (!isNodeDimmed(n)) keepIds.add(n.id);
+    });
+  }
+
+  if (keepIds.size === 0) return;
+
+  // Stash current rawData so we can restore later
+  hiddenRawData = { nodes: rawData.nodes, links: rawData.links };
+
+  // Filter rawData down to only kept nodes
+  rawData = {
+    nodes: rawData.nodes.filter(n => keepIds.has(n.id)),
+    links: rawData.links.filter(l => {
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      return keepIds.has(s) && keepIds.has(t);
+    })
+  };
+
+  // Clear all highlight state since we've committed the filter
+  searchTerm = '';
+  searchMatchIds.clear();
+  document.getElementById('searchBox').value = '';
+  focusNodeId = null;
+  focusNeighbors.clear();
+  document.getElementById('focusInfo').style.display = 'none';
+  dimmedTypes.clear();
+  dimmedCommunities.clear();
+
+  applyFilters();
+
+  // Reset type filter buttons
+  document.querySelectorAll('#typeFilters .btn').forEach(btn => btn.classList.add('active'));
+  rebuildLegend();
+
+  document.getElementById('hideNonMatchBtn').disabled = true;
+  document.getElementById('showAllBtn').disabled = false;
+
+  const kept = rawData.nodes.length;
+  document.getElementById('stats').textContent =
+    `Showing ${kept} nodes (filtered)\n` + document.getElementById('stats').textContent;
+}
+
+function showAll() {
+  if (!hiddenRawData) return;
+
+  rawData = hiddenRawData;
+  hiddenRawData = null;
+
+  // Clear all dims on restore
+  dimmedTypes.clear();
+  dimmedCommunities.clear();
+
+  applyFilters();
+
+  // Reset type filter buttons
+  document.querySelectorAll('#typeFilters .btn').forEach(btn => btn.classList.add('active'));
+  rebuildLegend();
+
+  document.getElementById('showAllBtn').disabled = true;
+  flyToTopNode();
+}
+
+// ============================================================
+// FILTERING
+// ============================================================
+
+function applyFilters() {
+  const filtered = { nodes: [], links: [] };
+  const degree = new Map();
+  rawData.links.forEach(l => {
+    degree.set(l.source, (degree.get(l.source)||0)+1);
+    degree.set(l.target, (degree.get(l.target)||0)+1);
+  });
+  const vis = new Set();
+  rawData.nodes.forEach(n => {
+    const d = degree.get(n.id)||0;
+    // Only min-degree is a hard filter now; type filtering is visual-only
+    if (d < minDegree) return;
+    vis.add(n.id);
+    filtered.nodes.push({ ...n, connections: d });
+  });
+  rawData.links.forEach(l => {
+    if (vis.has(l.source) && vis.has(l.target)) filtered.links.push({ ...l });
+  });
+
+  nodesByDegree = filtered.nodes
+    .sort((a,b) => b.connections - a.connections)
+    .map(n => n.id);
+
+  Graph.graphData(filtered);
+  updateStats(filtered);
+}
+
+function updateStats(data) {
+  const types = {};
+  data.nodes.forEach(n => { types[n.entity_type] = (types[n.entity_type]||0)+1; });
+  let html = `Nodes: ${data.nodes.length} · Edges: ${data.links.length}\n`;
+  for (const [t,c] of Object.entries(types).sort((a,b)=>b[1]-a[1])) html += `${t}: ${c}\n`;
+  document.getElementById('stats').textContent = html;
+}
+
+// ============================================================
+// FOCUS MODE
+// ============================================================
+
+function focusOnNode(node) {
+  // Clear any active search so focus isn't fighting it
+  searchTerm = '';
+  searchMatchIds.clear();
+  document.getElementById('searchBox').value = '';
+
+  focusNodeId = node.id;
+  const hops = focusHops;
+  const data = Graph.graphData();
+
+  const adj = new Map();
+  data.links.forEach(l => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    if (!adj.has(s)) adj.set(s, []);
+    if (!adj.has(t)) adj.set(t, []);
+    adj.get(s).push(t);
+    adj.get(t).push(s);
+  });
+
+  focusNeighbors.clear();
+  focusNeighbors.add(node.id);
+  let frontier = [node.id];
+  for (let h = 0; h < hops; h++) {
+    const next = [];
+    frontier.forEach(nid => {
+      (adj.get(nid)||[]).forEach(nb => {
+        if (!focusNeighbors.has(nb)) { focusNeighbors.add(nb); next.push(nb); }
+      });
+    });
+    frontier = next;
+  }
+
+  refreshVisuals();
+
+  document.getElementById('focusInfo').style.display = 'flex';
+  document.getElementById('focusLabel').textContent =
+    `Focused: "${node.name}" — ${focusNeighbors.size} nodes (${hops}-hop)`;
+  document.getElementById('hideNonMatchBtn').disabled = false;
+
+  const d = 200, r = 1 + d / Math.hypot(node.x, node.y, node.z||0);
+  Graph.cameraPosition({ x:node.x*r, y:node.y*r, z:(node.z||0)*r }, node, 1000);
+}
+
+function clearFocus() {
+  focusNodeId = null;
+  focusNeighbors.clear();
+  refreshVisuals();
+  document.getElementById('focusInfo').style.display = 'none';
+  flyToTopNode();
+}
+
+// Fly camera to the highest-degree node (center of rotation)
+function flyToTopNode(duration = 1000) {
+  if (!nodesByDegree.length) return;
+  const topId = nodesByDegree[0];
+  const node = Graph.graphData().nodes.find(n => n.id === topId);
+  if (!node || node.x === undefined) return;
+
+  const distance = 300;
+  const dist = Math.hypot(node.x, node.y, node.z || 0) || 1;
+  const ratio = 1 + distance / dist;
+  Graph.cameraPosition(
+    { x: node.x * ratio, y: node.y * ratio, z: (node.z || 0) * ratio },
+    node,  // lookAt target = the node itself, so it becomes center of rotation
+    duration
+  );
+}
+
+// ============================================================
+// UI WIRING
+// ============================================================
+
+// Search (debounced — waits 300ms after typing stops)
+let searchDebounceTimer = null;
+document.getElementById('searchBox').addEventListener('input', function(e) {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    searchTerm = e.target.value.toLowerCase().trim();
+    refreshVisuals();
+    // Enable/disable hide button based on whether there are matches
+    document.getElementById('hideNonMatchBtn').disabled = !(searchTerm && searchMatchIds.size > 0) && !focusNodeId;
+  }, 300);
+});
+
+// Min degree
+document.getElementById('minDegree').addEventListener('change', function(e) {
+  minDegree = parseInt(e.target.value) || 1;
+  applyFilters();
+});
+
+// Hide non-matching nodes
+document.getElementById('hideNonMatchBtn').addEventListener('click', hideNonMatching);
+
+// Show all nodes (restore from hide)
+document.getElementById('showAllBtn').addEventListener('click', showAll);
+
+// Label count slider
+document.getElementById('labelCountSlider').addEventListener('input', function(e) {
+  topLabelCount = parseInt(e.target.value);
+  document.getElementById('labelCountVal').textContent = topLabelCount;
+  refreshVisuals();
+});
+
+// Label size slider
+document.getElementById('labelSizeSlider').addEventListener('input', function(e) {
+  labelSize = parseFloat(e.target.value);
+  document.getElementById('labelSizeVal').textContent = labelSize.toFixed(1);
+  refreshVisuals();
+});
+
+// Base node size slider
+document.getElementById('baseSizeSlider').addEventListener('input', function(e) {
+  nodeBaseSize = parseFloat(e.target.value);
+  document.getElementById('baseSizeVal').textContent = nodeBaseSize.toFixed(1);
+  refreshVisuals();
+});
+
+// Degree scale slider
+document.getElementById('degreeScaleSlider').addEventListener('input', function(e) {
+  degreeScale = parseFloat(e.target.value);
+  document.getElementById('degreeScaleVal').textContent = degreeScale.toFixed(2);
+  refreshVisuals();
+});
+
+// Label opacity slider
+document.getElementById('labelOpacitySlider').addEventListener('input', function(e) {
+  labelOpacity = parseFloat(e.target.value);
+  document.getElementById('labelOpacityVal').textContent = labelOpacity.toFixed(2);
+  refreshVisuals();
+});
+
+// Label BG opacity slider
+document.getElementById('labelBgSlider').addEventListener('input', function(e) {
+  labelBgOpacity = parseFloat(e.target.value);
+  document.getElementById('labelBgVal').textContent = labelBgOpacity.toFixed(2);
+  refreshVisuals();
+});
+
+// Edge opacity slider
+document.getElementById('edgeOpacitySlider').addEventListener('input', function(e) {
+  edgeOpacity = parseFloat(e.target.value);
+  document.getElementById('edgeOpacityVal').textContent = edgeOpacity.toFixed(2);
+  refreshVisuals();
+});
+
+// Edge width slider
+document.getElementById('edgeWidthSlider').addEventListener('input', function(e) {
+  edgeWidthScale = parseFloat(e.target.value);
+  document.getElementById('edgeWidthVal').textContent = edgeWidthScale.toFixed(1);
+  Graph.linkWidth(Graph.linkWidth());  // force re-eval
+});
+
+// Physics: Repulsion (charge strength)
+document.getElementById('chargeSlider').addEventListener('input', function(e) {
+  const val = parseFloat(e.target.value);
+  document.getElementById('chargeVal').textContent = val;
+  Graph.d3Force('charge').strength(val);
+  Graph.d3ReheatSimulation();
+});
+
+// Physics: Spring length
+document.getElementById('springLenSlider').addEventListener('input', function(e) {
+  const val = parseFloat(e.target.value);
+  document.getElementById('springLenVal').textContent = val;
+  Graph.d3Force('link').distance(val);
+  Graph.d3ReheatSimulation();
+});
+
+// Physics: Spring force (strength)
+document.getElementById('springStrSlider').addEventListener('input', function(e) {
+  const val = parseFloat(e.target.value);
+  document.getElementById('springStrVal').textContent = val.toFixed(2);
+  Graph.d3Force('link').strength(val);
+  Graph.d3ReheatSimulation();
+});
+
+// Physics: Center gravity — uses forceX/Y/Z to pull nodes toward origin
+// This prevents orphans from flying off into space
+document.getElementById('gravitySlider').addEventListener('input', function(e) {
+  const val = parseFloat(e.target.value);
+  document.getElementById('gravityVal').textContent = val.toFixed(3);
+  updateGravity(val);
+  Graph.d3ReheatSimulation();
+});
+
+function updateGravity(strength) {
+  // 3d-force-graph bundles d3-force-3d which includes forceX/Y/Z
+  // We access them through the graph's d3Force interface
+  // These pull every node toward coordinate 0 on each axis
+  // with configurable strength — acts like a soft bounding leash
+  try {
+    const fx = Graph.d3Force('gravX');
+    const fy = Graph.d3Force('gravY');
+    const fz = Graph.d3Force('gravZ');
+    if (fx) fx.strength(strength);
+    if (fy) fy.strength(strength);
+    if (fz) fz.strength(strength);
+  } catch(e) {
+    console.warn('Could not update gravity forces:', e);
+  }
+}
+
+// Toggle labels
+document.getElementById('toggleLabels').addEventListener('click', function() {
+  showLabels = !showLabels;
+  this.textContent = showLabels ? 'Labels: ON' : 'Labels: OFF';
+  this.classList.toggle('active', showLabels);
+  refreshVisuals();
+});
+
+// Toggle 2D/3D
+document.getElementById('toggle2D').addEventListener('click', function() {
+  is3D = !is3D;
+  this.textContent = is3D ? 'View: 3D' : 'View: 2D';
+  if (!is3D) {
+    Graph.d3Force('z', null);
+    Graph.graphData().nodes.forEach(n => { n.fz = 0; });
+    Graph.numDimensions(2);
+  } else {
+    Graph.numDimensions(3);
+    Graph.graphData().nodes.forEach(n => { delete n.fz; });
+    Graph.d3ReheatSimulation();
+  }
+});
+
+// Toggle color by type / community
+document.getElementById('toggleCommunity').addEventListener('click', function() {
+  colorByCommunity = !colorByCommunity;
+  this.textContent = colorByCommunity ? 'Color: Community' : 'Color: Type';
+  this.classList.toggle('active', colorByCommunity);
+  // Clear dims from the other mode and sprite cache
+  dimmedTypes.clear();
+  dimmedCommunities.clear();
+  labelSpriteCache.clear();
+  cachedBgOpacity = -1;
+  // Reset type filter buttons
+  document.querySelectorAll('#typeFilters .btn').forEach(btn => btn.classList.add('active'));
+  rebuildLegend();
+  refreshVisuals();
+});
+
+// Focus mode toggle
+document.getElementById('focusBtn').addEventListener('click', function() {
+  focusMode = !focusMode;
+  this.classList.toggle('active', focusMode);
+  this.textContent = focusMode ? 'Focus: ON' : 'Focus Mode';
+  if (!focusMode) clearFocus();
+  else {
+    document.getElementById('focusInfo').style.display = 'flex';
+    document.getElementById('focusLabel').textContent = 'Click a node to focus';
+  }
+});
+
+document.getElementById('exitFocus').addEventListener('click', () => {
+  focusMode = false;
+  document.getElementById('focusBtn').classList.remove('active');
+  document.getElementById('focusBtn').textContent = 'Focus Mode';
+  clearFocus();
+});
+
+// Focus hops slider — re-focuses current node live when adjusted
+document.getElementById('focusHopsSlider').addEventListener('input', function(e) {
+  focusHops = parseInt(e.target.value);
+  document.getElementById('focusHopsVal').textContent = focusHops;
+  // If currently focused on a node, re-run focus with new hop count
+  if (focusNodeId) {
+    const nodeData = Graph.graphData().nodes.find(n => n.id === focusNodeId);
+    if (nodeData) focusOnNode(nodeData);
+  }
+});
+
+// Reset
+document.getElementById('resetBtn').addEventListener('click', () => {
+  clearFocus();
+  searchTerm = '';
+  document.getElementById('searchBox').value = '';
+  refreshVisuals();
+  flyToTopNode();
+});
+
+// ============================================================
+// RIGHT-CLICK CONTEXT MENU
+// ============================================================
+
+let contextMenuNodeId = null;
+
+const contextMenu = document.createElement('div');
+contextMenu.id = 'nodeContextMenu';
+contextMenu.style.cssText = 'display:none; position:absolute; background:rgba(10,10,20,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:8px; padding:5px 0; z-index:2000; font-family:"DM Sans",sans-serif; min-width:220px; backdrop-filter:blur(12px);';
+
+const ctxItemStyle = 'padding:8px 15px; color:#ccc; cursor:pointer; font-size:13px;';
+const ctxHoverOn = "this.style.background='rgba(100,180,255,0.15)'; this.style.color='#fff'";
+const ctxHoverOff = "this.style.background='transparent'; this.style.color='#ccc'";
+
+contextMenu.innerHTML = `
+  <div id="ctxCopyPath" style="${ctxItemStyle}" onmouseover="${ctxHoverOn}" onmouseout="${ctxHoverOff}">
+    📋 Copy File Path
+  </div>
+  <div id="ctxFocusNode" style="${ctxItemStyle}" onmouseover="${ctxHoverOn}" onmouseout="${ctxHoverOff}">
+    🔍 Focus on Node
+  </div>
+  <div style="border-top:1px solid rgba(255,255,255,0.08); margin:4px 0;"></div>
+  <div id="ctxIsolateType" style="${ctxItemStyle}" onmouseover="${ctxHoverOn}" onmouseout="${ctxHoverOff}">
+    🎨 Isolate Type: <span id="ctxIsolateTypeLabel">—</span>
+  </div>
+  <div id="ctxIsolateCommunity" style="${ctxItemStyle}" onmouseover="${ctxHoverOn}" onmouseout="${ctxHoverOff}">
+    🏘️ Isolate Community: <span id="ctxIsolateCommunityLabel">—</span>
+  </div>
+  <div style="border-top:1px solid rgba(255,255,255,0.08); margin:4px 0;"></div>
+  <div id="ctxClearDims" style="${ctxItemStyle}" onmouseover="${ctxHoverOn}" onmouseout="${ctxHoverOff}">
+    ↩️ Clear All Dims
+  </div>
+`;
+document.body.appendChild(contextMenu);
+
+// Intercept right-click on the canvas
+container.addEventListener('contextmenu', function(evt) {
+  evt.preventDefault();
+
+  if (!lastHoveredNode) {
+    contextMenu.style.display = 'none';
+    return;
+  }
+
+  contextMenuNodeId = lastHoveredNode.id;
+  const nodeData = Graph.graphData().nodes.find(n => n.id === contextMenuNodeId);
+
+  // Update dynamic labels
+  if (nodeData) {
+    document.getElementById('ctxIsolateTypeLabel').textContent = nodeData.entity_type || '?';
+    const comm = nodeData.community !== undefined ? nodeData.community : '?';
+    document.getElementById('ctxIsolateCommunityLabel').textContent = comm;
+  }
+
+  contextMenu.style.left = evt.pageX + 'px';
+  contextMenu.style.top = evt.pageY + 'px';
+  contextMenu.style.display = 'block';
+});
+
+// Track last hovered node for context menu
+let lastHoveredNode = null;
+
+// Hide context menu on click/scroll
+document.addEventListener('click', () => { contextMenu.style.display = 'none'; });
+document.addEventListener('wheel', () => { contextMenu.style.display = 'none'; });
+
+// Copy File Path
+document.getElementById('ctxCopyPath').addEventListener('click', function() {
+  if (!contextMenuNodeId) return;
+  const nodeData = Graph.graphData().nodes.find(n => n.id === contextMenuNodeId);
+  const filePath = nodeData ? (nodeData.first_seen_document || 'unknown') : 'unknown';
+  navigator.clipboard.writeText(filePath).then(() => {
+    document.getElementById('stats').textContent = 'Copied: ' + filePath;
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = filePath;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    document.getElementById('stats').textContent = 'Copied: ' + filePath;
+  });
+  contextMenu.style.display = 'none';
+});
+
+// Focus on Node
+document.getElementById('ctxFocusNode').addEventListener('click', function() {
+  if (!contextMenuNodeId) return;
+  const nodeData = Graph.graphData().nodes.find(n => n.id === contextMenuNodeId);
+  if (nodeData) {
+    focusMode = true;
+    document.getElementById('focusBtn').classList.add('active');
+    document.getElementById('focusBtn').textContent = 'Focus: ON';
+    focusOnNode(nodeData);
+  }
+  contextMenu.style.display = 'none';
+});
+
+// Isolate Type — dim everything except this node's type (works in any color mode)
+document.getElementById('ctxIsolateType').addEventListener('click', function() {
+  if (!contextMenuNodeId) return;
+  const nodeData = Graph.graphData().nodes.find(n => n.id === contextMenuNodeId);
+  if (nodeData) {
+    isolateByType(nodeData.entity_type);
+  }
+  contextMenu.style.display = 'none';
+});
+
+// Isolate Community — dim everything except this node's community (works in any color mode)
+document.getElementById('ctxIsolateCommunity').addEventListener('click', function() {
+  if (!contextMenuNodeId) return;
+  const nodeData = Graph.graphData().nodes.find(n => n.id === contextMenuNodeId);
+  if (nodeData && nodeData.community !== undefined) {
+    isolateByCommunity(nodeData.community);
+  }
+  contextMenu.style.display = 'none';
+});
+
+// Clear all dims
+document.getElementById('ctxClearDims').addEventListener('click', function() {
+  clearAllDims();
+  contextMenu.style.display = 'none';
+});
+
+// ============================================================
+// EXPORT PANEL
+// ============================================================
+
+function getVisibleNodes() {
+  const data = Graph.graphData();
+  if (!data.nodes.length) return [];
+
+  // If searching, return search matches (excluding dimmed)
+  if (searchTerm && searchMatchIds.size > 0) {
+    return data.nodes.filter(n => searchMatchIds.has(n.id) && !isNodeDimmed(n));
+  }
+  // If focused, return focus neighborhood (excluding dimmed)
+  if (focusNodeId && focusNeighbors.size > 0) {
+    return data.nodes.filter(n => focusNeighbors.has(n.id) && !isNodeDimmed(n));
+  }
+  // If types/communities are dimmed, return only non-dimmed
+  if (dimmedTypes.size > 0 || dimmedCommunities.size > 0) {
+    return data.nodes.filter(n => !isNodeDimmed(n));
+  }
+  // Otherwise, all currently filtered nodes
+  return data.nodes;
+}
+
+function getVisibleLinks(visibleIds) {
+  const idSet = new Set(visibleIds);
+  return Graph.graphData().links.filter(l => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    return idSet.has(s) && idSet.has(t);
+  });
+}
+
+function buildExportText() {
+  const nodes = getVisibleNodes();
+  if (!nodes.length) return '(No visible nodes to export)';
+
+  const visibleIds = nodes.map(n => n.id);
+  const links = getVisibleLinks(visibleIds);
+
+  // Sort nodes: by type then by connections desc
+  const sorted = [...nodes].sort((a, b) => {
+    if (a.entity_type !== b.entity_type) return a.entity_type.localeCompare(b.entity_type);
+    return b.connections - a.connections;
+  });
+
+  // Header
+  let lines = [];
+  let context = '';
+  if (searchTerm) context = `Search: "${searchTerm}"`;
+  else if (focusNodeId) context = `Focus: "${focusNodeId}" (${focusHops}-hop)`;
+  else context = 'All filtered nodes';
+
+  lines.push(`KNOWLEDGE GRAPH EXPORT`);
+  lines.push(`Context: ${context}`);
+  lines.push(`Nodes: ${nodes.length} | Relationships: ${links.length}`);
+  lines.push(`${'='.repeat(60)}`);
+  lines.push('');
+
+  // Group by type
+  const byType = {};
+  sorted.forEach(n => {
+    if (!byType[n.entity_type]) byType[n.entity_type] = [];
+    byType[n.entity_type].push(n);
+  });
+
+  // Build a quick lookup for relationships by node
+  const relsByNode = {};
+  links.forEach(l => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    const rels = l.relationships || [];
+
+    if (!relsByNode[s]) relsByNode[s] = [];
+    if (!relsByNode[t]) relsByNode[t] = [];
+
+    rels.forEach(r => {
+      relsByNode[s].push({ other: t, type: r.type, description: r.description });
+      relsByNode[t].push({ other: s, type: r.type, description: r.description });
+    });
+  });
+
+  for (const [type, typeNodes] of Object.entries(byType)) {
+    lines.push(`── ${type.toUpperCase()} (${typeNodes.length}) ${'─'.repeat(40)}`);
+    lines.push('');
+
+    for (const node of typeNodes) {
+      lines.push(`  ${node.name}`);
+      if (node.description) {
+        lines.push(`    ${node.description}`);
+      }
+      lines.push(`    Connections: ${node.connections} | Documents: ${node.document_count}${node.community !== undefined ? ` | Community: ${node.community}` : ''}`);
+
+      // Documents
+      if (node.documents && node.documents.length > 0) {
+        const docs = node.documents.slice(0, 5);
+        lines.push(`    Sources: ${docs.map(d => `${d.filename} pg${d.page}`).join(', ')}${node.documents_total > 5 ? ` (+${node.documents_total - 5} more)` : ''}`);
+      }
+
+      // Relationships (only to other visible nodes)
+      const nodeRels = relsByNode[node.id] || [];
+      if (nodeRels.length > 0) {
+        // Deduplicate and limit
+        const seen = new Set();
+        const unique = [];
+        for (const r of nodeRels) {
+          const key = `${r.other}|${r.type}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(r);
+          }
+        }
+        lines.push(`    Relationships:`);
+        for (const r of unique.slice(0, 10)) {
+          const desc = r.description ? ` — ${r.description}` : '';
+          lines.push(`      → [${r.type}] ${r.other}${desc}`);
+        }
+        if (unique.length > 10) {
+          lines.push(`      ... and ${unique.length - 10} more`);
+        }
+      }
+
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function openExportPanel() {
+  const text = buildExportText();
+  document.getElementById('exportText').textContent = text;
+
+  // Update title with context
+  let title = 'Export';
+  if (searchTerm) title = `Export: "${searchTerm}"`;
+  else if (focusNodeId) title = `Export: ${focusNodeId}`;
+  document.getElementById('exportTitle').textContent = title;
+
+  document.getElementById('exportPanel').classList.add('open');
+}
+
+function closeExportPanel() {
+  document.getElementById('exportPanel').classList.remove('open');
+}
+
+function copyExportText() {
+  const text = document.getElementById('exportText').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    flashCopyButton();
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    flashCopyButton();
+  });
+}
+
+function flashCopyButton() {
+  const btns = [document.getElementById('exportCopyBtn'), document.getElementById('exportCopyBtn2')];
+  btns.forEach(btn => {
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copy-flash');
+    setTimeout(() => {
+      btn.textContent = '📋 Copy to Clipboard';
+      btn.classList.remove('copy-flash');
+    }, 1500);
+  });
+}
+
+// Wire up
+document.getElementById('exportBtn').addEventListener('click', openExportPanel);
+document.getElementById('exportCloseBtn').addEventListener('click', closeExportPanel);
+document.getElementById('exportCopyBtn').addEventListener('click', copyExportText);
+document.getElementById('exportCopyBtn2').addEventListener('click', copyExportText);
+
+// ============================================================
+// INIT — load data and start
+// ============================================================
+
+// Set up onNodeHover to track lastHoveredNode (for right-click context menu)
+Graph.onNodeHover(node => {
+  lastHoveredNode = node || null;
+  container.style.cursor = node ? 'pointer' : 'default';
+  const tt = document.getElementById('customTooltip');
+  if (node) {
+    const color = NODE_COLORS[node.entity_type] || NODE_COLORS.unknown;
+    let docHtml = '';
+    if (node.documents && node.documents.length > 0) {
+      const docs = node.documents.slice(0, 8);
+      docHtml = '<div style="margin-top:6px; font-size:11px; color:#777;">' +
+        docs.map(d => `• ${d.filename} (pg ${d.page})`).join('<br>') +
+        (node.documents_total > 8 ? `<br>… and ${node.documents_total - 8} more` : '') +
+        '</div>';
+    }
+    const communityLabel = node.community !== undefined ? `Community: ${node.community}` : '';
+    tt.innerHTML = `
+      <div class="tt-name" style="color:${color}">${node.name}</div>
+      <span class="tt-type" style="background:${color}22; color:${color}; border:1px solid ${color}44">${node.entity_type}</span>
+      ${communityLabel ? `<span class="tt-type" style="background:rgba(255,255,255,0.08); color:#aaa; border:1px solid rgba(255,255,255,0.12); margin-left:4px;">${communityLabel}</span>` : ''}
+      <div class="tt-desc">${node.description}</div>
+      <div class="tt-stat">Connections: ${node.connections} · Docs: ${node.document_count}</div>
+      <div class="tt-stat">First seen: ${node.first_seen_display || '?'} (pg ${node.first_seen_page || '?'})</div>
+      ${docHtml}`;
+    tt.style.display = 'block';
+  } else { tt.style.display = 'none'; }
+});
+
+// ============================================================
+// INIT — file picker driven
+// ============================================================
+
+function loadGraphData(data) {
+  rawData = { nodes: data.nodes, links: data.links };
+
+  // Auto-discover entity types and assign colors
+  buildColorMap(rawData.nodes);
+  buildCommunityColorMap(rawData.nodes);
+  rebuildTypeFilters();
+  rebuildLegend();
+
+  console.log(`Loaded ${rawData.nodes.length} nodes, ${rawData.links.length} edges`);
+  document.getElementById('stats').textContent =
+    `Loaded ${rawData.nodes.length} nodes\n${rawData.links.length} edges`;
+
+  Graph.d3Force('charge').strength(DEFAULTS.repulsion.val);
+  Graph.d3Force('link').distance(DEFAULTS.springLen.val);
+  Graph.d3Force('link').strength(DEFAULTS.springForce.val);
+
+  // Install centering gravity forces (forceX/Y/Z toward origin)
+  // These are what prevent orphan nodes from flying off to infinity.
+  // d3-force-3d (bundled by 3d-force-graph) exposes these constructors
+  // via the graph's d3Force setter when you pass a force object.
+  // We access the d3 module from the graph's internal reference.
+  try {
+    // 3d-force-graph uses d3-force-3d internally; we can grab its
+    // force constructors by examining what d3Force('charge') returns
+    // and walking up to the module. But simpler: the library accepts
+    // raw force functions via d3Force(name, force).
+    // d3.forceX/Y/Z are available as properties on the d3 object
+    // that 3d-force-graph bundles. We can create them inline:
+    const gravStr = DEFAULTS.gravity.val;
+
+    // forceX/Y/Z pull each node's x/y/z toward a target (0)
+    // We create simple force functions that mimic d3.forceX(0).strength(s)
+    function makeAxisForce(axis) {
+      let strength = gravStr;
+      function force(alpha) {
+        const nodes = force.nodes || [];
+        for (let i = 0; i < nodes.length; i++) {
+          const node = nodes[i];
+          node['v' + axis] += (0 - node[axis]) * strength * alpha;
+        }
+      }
+      force.initialize = function(n) { force.nodes = n; };
+      force.strength = function(s) {
+        if (s === undefined) return strength;
+        strength = s;
+        return force;
+      };
+      return force;
+    }
+
+    Graph.d3Force('gravX', makeAxisForce('x'));
+    Graph.d3Force('gravY', makeAxisForce('y'));
+    Graph.d3Force('gravZ', makeAxisForce('z'));
+  } catch(e) {
+    console.warn('Could not set up gravity forces:', e);
+  }
+
+  applyFilters();
+
+  // Fly to the hub node once positions have settled
+  // (nodes need a moment after applyFilters for positions to be computed)
+  setTimeout(() => flyToTopNode(1500), 500);
+
+  // Reduce pan sensitivity on the existing TrackballControls
+  const ctrl = Graph.controls();
+  if (ctrl && ctrl.panSpeed !== undefined) {
+    ctrl.panSpeed = DEFAULTS.panSpeed.val;
+  }
+}
+
+// File picker handler
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  document.getElementById('stats').textContent = `Loading ${file.name}...`;
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      const data = JSON.parse(evt.target.result);
+      if (!data.nodes || !data.links) {
+        throw new Error('JSON must have "nodes" and "links" arrays');
+      }
+      loadGraphData(data);
+      // Update the button label to show loaded file
+      document.querySelector('label[for="fileInput"]').textContent = `📂 ${file.name}`;
+    } catch (err) {
+      console.error('Failed to parse JSON:', err);
+      document.getElementById('stats').textContent =
+        `Error: ${err.message}`;
+    }
+  };
+  reader.readAsText(file);
+});
+
+// Show prompt on startup
+document.getElementById('stats').textContent =
+  'Click "Load graph_data.json" above\nto load your exported graph data.\n\nGenerate it with:\n  python export_graph_json.py';
+
+// Handle window resize
+window.addEventListener('resize', () => {
+  Graph.width(window.innerWidth);
+  Graph.height(window.innerHeight);
+});
+
+</script>
+</body>
+</html>
