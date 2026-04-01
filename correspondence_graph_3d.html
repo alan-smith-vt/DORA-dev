@@ -1755,23 +1755,24 @@ function openDocumentsPanel(node) {
   } else {
     for (let i = 0; i < docs.length; i++) {
       const d = docs[i];
-      const linkText = `${d.filename} — pg ${d.page}`;
+      const displayText = `${d.filename} — pg ${d.page}`;
+      const copyPath = d.path || d.filename;
 
       const row = document.createElement('div');
       row.className = 'doc-link-row';
 
       const span = document.createElement('span');
       span.className = 'doc-link-text';
-      span.textContent = linkText;
+      span.textContent = displayText;
       row.appendChild(span);
 
       const btn = document.createElement('div');
       btn.className = 'doc-copy-btn';
-      btn.title = 'Copy';
+      btn.title = 'Copy path';
       btn.textContent = '📋';
       btn.addEventListener('click', (function(text, el) {
         return function() { copyDocLink(el, text); };
-      })(linkText, btn));
+      })(copyPath, btn));
       row.appendChild(btn);
 
       exportText.appendChild(row);
@@ -1789,7 +1790,7 @@ function openDocumentsPanel(node) {
   document.getElementById('exportPanel').classList.add('open');
 
   // Store plain text for Copy All button
-  const allText = docs.map(d => `${d.filename} — pg ${d.page}`).join('\n');
+  const allText = docs.map(d => d.path || d.filename).join('\n');
   exportText.dataset.allDocText = allText;
 }
 
