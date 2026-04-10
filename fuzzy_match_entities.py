@@ -13,8 +13,12 @@ so you can tune thresholds before trusting merges.
 
 Metrics used:
   - Jaro-Winkler similarity  (good for typos: "Jon" vs "John")
-  - Token-set ratio           (good for reordering / partial overlap)
-  - Combined score = max(jw, token_set / 100)
+  - Token-sort ratio          (good for reordering: "Smith, John" vs "John Smith")
+  - Combined score = max(jw, token_sort / 100)
+
+Note: token-SET ratio is intentionally NOT used — it gives 100% whenever
+one name's tokens are a subset of the other's, which produces rampant
+false positives (e.g. "Michael Johnson" vs "Michael A. Johnson" = 100%).
 
 Blocking strategy:
   Pairs must share at least one token (word) in the normalized name.
@@ -58,23 +62,19 @@ def score_pair(name_a: str, name_b: str) -> dict:
     Returns dict with individual scores and a combined score.
     All scores are in [0, 1].
     """
-    # Jaro-Winkler on the full normalized name
+    # Jaro-Winkler on the full normalized name — best for character-level typos
     jw = JaroWinkler.normalized_similarity(name_a, name_b)
 
-    # Token-set ratio: handles reordering and subset matching
-    # e.g. "John A. Smith" vs "Smith, John" -> high score
-    tsr = fuzz.token_set_ratio(name_a, name_b) / 100.0
+    # Token-sort ratio: sorts tokens alphabetically then computes ratio.
+    # Handles reordering ("Smith, William" vs "William Smith") without the
+    # subset-inflation problem of token-set ratio.
+    tsort = fuzz.token_sort_ratio(name_a, name_b) / 100.0
 
-    # Partial ratio: best substring alignment
-    # e.g. "EPA" vs "US EPA" -> high partial
-    partial = fuzz.partial_ratio(name_a, name_b) / 100.0
-
-    combined = max(jw, tsr)
+    combined = max(jw, tsort)
 
     return {
         "jaro_winkler": round(jw, 4),
-        "token_set_ratio": round(tsr, 4),
-        "partial_ratio": round(partial, 4),
+        "token_sort_ratio": round(tsort, 4),
         "combined": round(combined, 4),
     }
 
@@ -284,8 +284,7 @@ def generate_report(
             "desc_b": ent_b["description"] or "",
             "docs_b": docs_b,
             "jw": scores["jaro_winkler"],
-            "tsr": scores["token_set_ratio"],
-            "partial": scores["partial_ratio"],
+            "tsort": scores["token_sort_ratio"],
             "combined": scores["combined"],
             "canonical": canonical,
         })
@@ -508,7 +507,7 @@ def generate_report(
            placeholder="Search pairs..." oninput="filterPairs()">
     <button class="filter-btn" id="sort-combined" onclick="sortPairs('combined')">Sort: Combined</button>
     <button class="filter-btn" onclick="sortPairs('jw')">Sort: JW</button>
-    <button class="filter-btn" onclick="sortPairs('tsr')">Sort: TokenSet</button>
+    <button class="filter-btn" onclick="sortPairs('tsort')">Sort: TokenSort</button>
     <span class="count-badge" id="pair-count"></span>
   </div>
   <table class="pairs-table">
@@ -518,7 +517,7 @@ def generate_report(
         <th>Entity B</th>
         <th onclick="sortPairs('combined')">Combined</th>
         <th onclick="sortPairs('jw')">JW</th>
-        <th onclick="sortPairs('tsr')">TokenSet</th>
+        <th onclick="sortPairs('tsort')">TokenSort</th>
         <th>Canonical</th>
       </tr>
     </thead>
@@ -557,7 +556,7 @@ function renderPairs(pairs) {{
     <td>${{esc(p.name_b)}} <span class="type-badge">${{p.type_b}}</span></td>
     <td>${{scoreBar(p.combined)}}</td>
     <td>${{scoreBar(p.jw)}}</td>
-    <td>${{scoreBar(p.tsr)}}</td>
+    <td>${{scoreBar(p.tsort)}}</td>
     <td style="color:var(--green);font-size:0.8rem">${{esc(p.canonical)}}</td>
   </tr>`).join('');
   document.getElementById('pair-count').textContent = `${{pairs.length}} of ${{PAIRS.length}} pairs`;

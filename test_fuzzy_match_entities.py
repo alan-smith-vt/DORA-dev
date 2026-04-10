@@ -146,19 +146,34 @@ class TestScorePair(unittest.TestCase):
         self.assertGreater(scores["combined"], 0.90)
 
     def test_token_reorder(self):
-        """'smith william' vs 'william smith' should have high token-set ratio."""
+        """'smith william' vs 'william smith' should have high token-sort ratio."""
         scores = score_pair("smith william", "william smith")
-        self.assertGreater(scores["token_set_ratio"], 0.95)
+        self.assertGreater(scores["token_sort_ratio"], 0.95)
 
     def test_abbreviation(self):
-        """'r smith' vs 'robert smith' should have decent token-set."""
+        """'r smith' vs 'robert smith' — token-sort is moderate (not inflated)."""
         scores = score_pair("r smith", "robert smith")
-        self.assertGreater(scores["token_set_ratio"], 0.75)
+        self.assertGreater(scores["token_sort_ratio"], 0.60)
+        # Crucially, token_sort does NOT give 100% for subset matches
+        self.assertLess(scores["token_sort_ratio"], 0.90)
 
     def test_unrelated_low_score(self):
         """Completely different names should score low."""
         scores = score_pair("john doe", "jane williams")
         self.assertLess(scores["combined"], 0.80)
+
+    def test_subset_not_inflated(self):
+        """Token-sort should NOT give 100% for subset matches.
+
+        This was the core bug with token-set ratio: 'michael johnson' is a
+        token subset of 'michael a johnson', so token-set gave 100%.
+        Token-sort correctly gives a lower score.
+        """
+        scores = score_pair("michael johnson", "michael a johnson")
+        self.assertLess(scores["token_sort_ratio"], 1.0)
+        # Combined should still be high (JW catches it) but not 100%
+        self.assertLess(scores["combined"], 1.0)
+        self.assertGreater(scores["combined"], 0.90)
 
     def test_similar_but_different(self):
         """'james wilson' vs 'james williams' — similar but probably different people."""
@@ -398,6 +413,9 @@ class TestHTMLReport(unittest.TestCase):
         self.assertIn("const PAIRS", html)
         self.assertIn("const GROUPS", html)
         self.assertIn("Candidate Pairs", html)
+        # Should reference token-sort, not token-set
+        self.assertIn("TokenSort", html)
+        self.assertNotIn("TokenSet", html)
 
 
 if __name__ == "__main__":
