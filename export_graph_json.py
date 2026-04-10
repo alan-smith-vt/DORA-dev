@@ -52,7 +52,7 @@ from typing import Dict, Optional
 #OUTPUT_JSON = "data/Page364_graph_data.json"
 #DOC_BASE_PATH = ""                  # Prefix for file paths (e.g. "C:/Projects/Docs/")
 
-ENTITY_DB = "data/BAYT_PROD_entities_normalized.db"
+ENTITY_DB = "data/BAYT_PROD_entities_normalized_fuzzy.db"
 CHUNK_DB = "data/BAYT_PROD_chunks.db"
 OUTPUT_JSON = "data/BAYT_PROD.json"
 DOC_BASE_PATH = ""
