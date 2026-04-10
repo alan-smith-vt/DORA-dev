@@ -384,8 +384,9 @@ def export_graph():
             'first_seen_display': Path(first_seen_path).name,
             'first_seen_page': first_seen_page,
             'documents': [
-                {'filename': Path(e['filename']).name, 'page': e['page']}
-                for e in doc_entries[:15]
+                {'filename': Path(e['filename']).name, 'page': e['page'],
+                 'path': DOC_BASE_PATH + e['filename']}
+                for e in doc_entries
             ],
             'documents_total': len(doc_entries),
             'searchText': search_text,
