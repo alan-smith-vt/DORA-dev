@@ -239,6 +239,41 @@
   #exportFooter .btn { flex: 1; }
 
   .copy-flash { background: rgba(100, 180, 255, 0.3) !important; transition: background 0.15s; }
+
+  /* ── Document Links View (inside export panel) ── */
+  .doc-link-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    margin-bottom: 4px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #ccc;
+    line-height: 1.4;
+    word-break: break-all;
+  }
+  .doc-link-row:hover { background: rgba(100,180,255,0.08); }
+  .doc-link-text { flex: 1; margin-right: 10px; }
+  .doc-copy-btn {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    cursor: pointer;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #999;
+    font-size: 14px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .doc-copy-btn:hover { background: rgba(100,180,255,0.2); color: #fff; }
+  .doc-copy-btn.copied { background: rgba(80,200,120,0.25); color: #6f6; border-color: rgba(80,200,120,0.3); }
 </style>
 </head>
 <body>
@@ -1456,6 +1491,9 @@ contextMenu.innerHTML = `
   <div id="ctxCopyPath" style="${ctxItemStyle}" onmouseover="${ctxHoverOn}" onmouseout="${ctxHoverOff}">
     📋 Copy File Path
   </div>
+  <div id="ctxShowAllDocs" style="${ctxItemStyle}" onmouseover="${ctxHoverOn}" onmouseout="${ctxHoverOff}">
+    📄 Show All Documents
+  </div>
   <div id="ctxFocusNode" style="${ctxItemStyle}" onmouseover="${ctxHoverOn}" onmouseout="${ctxHoverOff}">
     🔍 Focus on Node
   </div>
@@ -1520,6 +1558,14 @@ document.getElementById('ctxCopyPath').addEventListener('click', function() {
     document.body.removeChild(ta);
     document.getElementById('stats').textContent = 'Copied: ' + filePath;
   });
+  contextMenu.style.display = 'none';
+});
+
+// Show All Documents
+document.getElementById('ctxShowAllDocs').addEventListener('click', function() {
+  if (!contextMenuNodeId) return;
+  const nodeData = Graph.graphData().nodes.find(n => n.id === contextMenuNodeId);
+  if (nodeData) openDocumentsPanel(nodeData);
   contextMenu.style.display = 'none';
 });
 
@@ -1691,9 +1737,92 @@ function buildExportText() {
   return lines.join('\n');
 }
 
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function openDocumentsPanel(node) {
+  const docs = node.documents || [];
+  const total = node.documents_total || docs.length;
+  const nodeName = node.name || node.id;
+
+  const exportText = document.getElementById('exportText');
+  exportText.style.whiteSpace = 'normal';
+  exportText.innerHTML = '';
+
+  if (docs.length === 0) {
+    exportText.innerHTML = '<div style="color:#666; font-size:12px; padding:12px 0;">No documents found for this node.</div>';
+  } else {
+    for (let i = 0; i < docs.length; i++) {
+      const d = docs[i];
+      const displayText = `${d.filename} — pg ${d.page}`;
+      const copyPath = d.path || d.filename;
+
+      const row = document.createElement('div');
+      row.className = 'doc-link-row';
+
+      const span = document.createElement('span');
+      span.className = 'doc-link-text';
+      span.textContent = displayText;
+      row.appendChild(span);
+
+      const btn = document.createElement('div');
+      btn.className = 'doc-copy-btn';
+      btn.title = 'Copy path';
+      btn.textContent = '📋';
+      btn.addEventListener('click', (function(text, el) {
+        return function() { copyDocLink(el, text); };
+      })(copyPath, btn));
+      row.appendChild(btn);
+
+      exportText.appendChild(row);
+    }
+    if (total > docs.length) {
+      const note = document.createElement('div');
+      note.style.cssText = 'color:#666; font-size:11px; padding:8px 4px 0;';
+      note.textContent = `Showing ${docs.length} of ${total} documents (limit from export)`;
+      exportText.appendChild(note);
+    }
+  }
+
+  // Reuse the export panel
+  document.getElementById('exportTitle').textContent = `Documents: ${nodeName}`;
+  document.getElementById('exportPanel').classList.add('open');
+
+  // Store plain text for Copy All button
+  const allText = docs.map(d => d.path || d.filename).join('\n');
+  exportText.dataset.allDocText = allText;
+}
+
+function copyDocLink(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showDocCopied(btn);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showDocCopied(btn);
+  });
+}
+
+function showDocCopied(btn) {
+  btn.textContent = '✓';
+  btn.classList.add('copied');
+  setTimeout(() => {
+    btn.textContent = '📋';
+    btn.classList.remove('copied');
+  }, 1500);
+}
+
 function openExportPanel() {
   const text = buildExportText();
-  document.getElementById('exportText').textContent = text;
+  const exportText = document.getElementById('exportText');
+  exportText.style.whiteSpace = 'pre-wrap';
+  exportText.textContent = text;
+  delete exportText.dataset.allDocText;
 
   // Update title with context
   let title = 'Export';
@@ -1706,10 +1835,15 @@ function openExportPanel() {
 
 function closeExportPanel() {
   document.getElementById('exportPanel').classList.remove('open');
+  // Reset export panel to default text mode
+  const exportText = document.getElementById('exportText');
+  exportText.style.whiteSpace = 'pre-wrap';
+  delete exportText.dataset.allDocText;
 }
 
 function copyExportText() {
-  const text = document.getElementById('exportText').textContent;
+  const el = document.getElementById('exportText');
+  const text = el.dataset.allDocText || el.textContent;
   navigator.clipboard.writeText(text).then(() => {
     flashCopyButton();
   }).catch(() => {
