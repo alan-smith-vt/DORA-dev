@@ -1,0 +1,10 @@
+{
+    "chunk_db": "BAYT_PROD_chunks.db",
+    "output_dir": "./bucketed_output",
+    "progress_db": "bucket_progress.db",
+    "ollama_url": "http://localhost:11434/api/generate",
+    "model": "qwen2.5:7b",
+    "token_budget": 500,
+    "temperature": 0.1,
+    "context_window": 8192
+}

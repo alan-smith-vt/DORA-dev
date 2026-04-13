@@ -95,5 +95,6 @@ yarn.lock
 _ss/
 
 *.json
+!bucket_config.json
 
 data/
